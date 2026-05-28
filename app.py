@@ -1,35 +1,20 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, Response
+from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
+from botbuilder.schema import Activity
+import asyncio
+import json
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "OK - Bot Online"
+# pega do Azure Bot
+APP_ID = "41753d4c-12b5-448b-af15-f52ed6da67bc"
+APP_PASSWORD = ""
 
-@app.route("/api/messages", methods=["POST"])
-def messages():
-    # pega JSON de forma segura (Azure Bot às vezes manda payload diferente)
-    data = request.get_json(silent=True)
+settings = BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
+adapter = BotFrameworkAdapter(settings)
 
-    print("DEBUG - payload recebido:", data)
-
-    # proteção caso venha vazio ou inesperado
-    if not data:
-        return jsonify({
-            "type": "message",
-            "text": "Erro: requisição inválida (sem payload)."
-        })
-
-    # Azure Bot normalmente envia "text"
-    user_message = data.get("text")
-
-    if not user_message:
-        return jsonify({
-            "type": "message",
-            "text": "Erro: mensagem vazia recebida."
-        })
-
-    user_message = user_message.lower()
+async def bot_logic(turn_context: TurnContext):
+    user_message = turn_context.activity.text.lower()
 
     responses = {
         "rhel": "O Red Hat Enterprise Linux é uma distribuição Linux corporativa focada em estabilidade e segurança.",
@@ -46,12 +31,27 @@ def messages():
             reply = responses[key]
             break
 
-    print("DEBUG - resposta enviada:", reply)
+    await turn_context.send_activity(reply)
 
-    return jsonify({
-        "type": "message",
-        "text": reply
-    })
+@app.route("/")
+def home():
+    return "Bot online"
+
+@app.route("/api/messages", methods=["POST"])
+def messages():
+    body = request.json
+
+    activity = Activity().deserialize(body)
+    auth_header = request.headers.get("Authorization", "")
+
+    async def aux_func():
+        await adapter.process_activity(activity, auth_header, bot_logic)
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(aux_func())
+
+    return Response(status=201)
 
 if __name__ == "__main__":
     app.run(debug=True)
