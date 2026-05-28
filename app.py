@@ -1,22 +1,35 @@
 from flask import Flask, request, jsonify
 
-app = Flask(__name__)  # <- ISSO TEM QUE SER A PRIMEIRA COISA
+app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "OK"
+    return "OK - Bot Online"
 
 @app.route("/api/messages", methods=["POST"])
 def messages():
+    # pega JSON de forma segura (Azure Bot às vezes manda payload diferente)
     data = request.get_json(silent=True)
 
+    print("DEBUG - payload recebido:", data)
+
+    # proteção caso venha vazio ou inesperado
     if not data:
         return jsonify({
             "type": "message",
-            "text": "Erro: requisição inválida."
+            "text": "Erro: requisição inválida (sem payload)."
         })
 
-    user_message = data.get("text", "").lower()
+    # Azure Bot normalmente envia "text"
+    user_message = data.get("text")
+
+    if not user_message:
+        return jsonify({
+            "type": "message",
+            "text": "Erro: mensagem vazia recebida."
+        })
+
+    user_message = user_message.lower()
 
     responses = {
         "rhel": "O Red Hat Enterprise Linux é uma distribuição Linux corporativa focada em estabilidade e segurança.",
@@ -32,6 +45,8 @@ def messages():
         if key in user_message:
             reply = responses[key]
             break
+
+    print("DEBUG - resposta enviada:", reply)
 
     return jsonify({
         "type": "message",
